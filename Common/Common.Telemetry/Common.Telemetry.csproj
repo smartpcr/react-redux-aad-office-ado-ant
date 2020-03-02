@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netcoreapp3.1</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="Ensure.That" Version="8.1.2" />
+      <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.13.1" />
+      <PackageReference Include="Microsoft.ApplicationInsights.DependencyCollector" Version="2.13.1" />
+      <PackageReference Include="Microsoft.ApplicationInsights.Kubernetes" Version="1.1.1" />
+      <PackageReference Include="Microsoft.ApplicationInsights.Kubernetes.HostingStartup" Version="1.1.1" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="3.1.2" />
+      <PackageReference Include="Microsoft.Extensions.Logging.ApplicationInsights" Version="2.13.1" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="3.1.2" />
+      <PackageReference Include="Prometheus.Client" Version="3.1.0" />
+      <PackageReference Include="Prometheus.Client.AspNetCore" Version="3.1.0" />
+      <PackageReference Include="Prometheus.Client.HttpRequestDurations" Version="2.2.0" />
+      <PackageReference Include="Prometheus.Client.MetricPusher" Version="1.1.0" />
+      <PackageReference Include="Prometheus.Client.MetricServer" Version="3.1.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="RuntimeTelemetry" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\Common.Config\Common.Config.csproj" />
+    </ItemGroup>
+</Project>
