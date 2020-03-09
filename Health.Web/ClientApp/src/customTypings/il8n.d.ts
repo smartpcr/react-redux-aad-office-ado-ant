@@ -1,1 +1,0 @@
-declare function t(str: string): any;
