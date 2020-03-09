@@ -1,0 +1,81 @@
+@import "node_modules/azure-devops-ui/Core/_platformCommon";
+
+body {
+    display: block !important;
+}
+
+.bolt-list-box-loading {
+    .bolt-spinner-circle {
+        margin-right: 10px;
+    }
+
+    .bolt-spinner-label {
+        margin-top: 0px;
+    }
+}
+
+.border-bottom {
+    border-bottom: 1px solid;
+    border-bottom-color: $neutral-10;
+    padding-bottom: $spacingBorder;
+}
+
+.container {
+    max-width: 980px;
+    margin: auto;
+}
+
+.d-flex {
+    display: flex !important;
+}
+
+.mr-8 {
+    margin-right: $spacing-8 !important;
+}
+
+.mr-auto {
+    margin-right: auto !important;
+}
+
+.mb-8 {
+    margin-bottom: $spacing-8 !important;
+}
+
+.mt-0 {
+    margin-top: 0 !important;
+}
+
+.mt-8 {
+    margin-top: $spacing-8 !important;
+}
+
+.my-16 {
+    margin-top: $spacing-16 !important;
+    margin-bottom: $spacing-16 !important;
+}
+
+.px-20 {
+    padding: 0 20px;
+}
+
+.justify-between {
+    justify-content: space-between;
+}
+
+.w-33 {
+    width: (100% / 3) !important;
+}
+
+.w-50 {
+    width: 50% !important;
+}
+
+.w-100 {
+    width: 100% !important;
+}
+
+.height-1rem {
+    height: 1rem;
+}
+
+@import "./theme.scss";
