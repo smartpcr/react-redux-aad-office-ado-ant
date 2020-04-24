@@ -21,7 +21,7 @@ const config = {
   resolver: "jest-pnp-resolver",
   setupFiles: [
       "react-app-polyfill/jsdom",
-      "<rootDir>/config/jest/init.js",
+      "<rootDir>/config/jest/init.js"
   ],
   testMatch: [
       "<rootDir>/__tests__/**/*.(j|t)s?(x)"
@@ -30,7 +30,7 @@ const config = {
   testURL: "http://localhost",
   transform: {
       "^.+\\.(js|jsx|mjs)$": "<rootDir>/node_modules/babel-jest",
-      "^.+\\.tsx?$": "<rootDir>/config/jest/typescriptTransform.js",
+      "^.+\\.(ts|tsx)$": "<rootDir>/config/jest/typescriptTransform.js",
       "^.+\\.css$": "<rootDir>/config/jest/cssTransform.js",
       "^(?!.*\\.(js|jsx|mjs|css|json)$)": "<rootDir>/config/jest/fileTransform.js"
   },
@@ -46,8 +46,7 @@ const config = {
       "^react-native$": "react-native-web",
       "^.+\\.(css|scss)$": "identity-obj-proxy",
       "^~/(.*)": "<rootDir>/src/$1",
-      "^office-fabric/(.*)": "office-ui-fabric-react/lib-commonjs/$1",
-      "office-ui-fabric-react/lib/(.*)$": "office-ui-fabric-react/lib-commonjs/$1"
+      "^office-fabric/(.*)": "office-ui-fabric-react/lib-commonjs/$1"
   },
   moduleFileExtensions: [
       "web.ts",

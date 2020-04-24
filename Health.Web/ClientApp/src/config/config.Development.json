@@ -1,0 +1,4 @@
+{
+  "API_URL": "https://localhost.default.svc.cluster.local:5001",
+  "AD_REDIRECT_URI": "https://localhost.default.svc.cluster.local:5002/redirect.html"
+}

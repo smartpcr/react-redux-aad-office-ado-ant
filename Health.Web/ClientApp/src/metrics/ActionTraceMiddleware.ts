@@ -1,5 +1,4 @@
-import { Metrics } from "~/metrics";
-import { MetricSeverityLevel } from "~/metrics/Metrics";
+import { MetricSeverityLevel, trackTrace } from "./Metrics";
 import * as _ from "lodash";
 
 // follow-up: come fix this with proper typedefs once actions are typed
@@ -27,7 +26,7 @@ export const actionTracerMiddleware = (store: any) => (next: any) => (action: an
                     });
                 }
             }
-            Metrics.trackTrace(`ACTION_${actionType}`, MetricSeverityLevel.Verbose, dimensions);
+            trackTrace(`ACTION_${actionType}`, MetricSeverityLevel.Verbose, dimensions);
         }
     } catch {
         // silently swallow w/o disturbing the main functionality

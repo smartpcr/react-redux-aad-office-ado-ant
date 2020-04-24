@@ -1,7 +1,8 @@
-import { AppInsights } from "applicationinsights-js";
-import { ScrubTools } from "./ScrubTools";
-import { Config } from "~/config";
-import { aad } from "~/aad/AuthProvider";
+import { ApplicationInsights } from "@microsoft/applicationinsights-web";
+import * as chalk from "chalk";
+import { getHashString, maskEmail } from "./ScrubTools";
+import { Config } from "../config";
+import { authContext } from "../aad/AuthProvider";
 
 export enum MetricSeverityLevel {
     Verbose = 0,
@@ -11,129 +12,152 @@ export enum MetricSeverityLevel {
     Critical = 4
 }
 
-export module Metrics {
-    export async function init(): Promise<void> {
-        AppInsights.downloadAndSetup && AppInsights.downloadAndSetup({
-            instrumentationKey: Config.getValue("UI:APPINSIGHTS_INSTRUMENTATION_KEY"),
+let commonAppInsights: ApplicationInsights;
+
+export function initAppInsights(): void {
+    commonAppInsights = new ApplicationInsights({
+        config: {
+            instrumentationKey: Config.getValue("APPINSIGHTS_INSTRUMENTATION_KEY"),
             maxAjaxCallsPerView: -1
-        });
-
-        const user = await aad.getCurrentUser();
-        if (user) {
-            AppInsights.setAuthenticatedUserContext(ScrubTools.getHashString(user), undefined, true);
         }
+    });
+    loadAppInsights(commonAppInsights);
+}
 
-        AppInsights.queue.push(() => {
-            AppInsights.context.addTelemetryInitializer(envelope => {
-                envelope.tags["ai.device.roleName"] = envelope.tags["ai.cloud.role"] = "PolCat-Web";
-                maskPersonalInfo(envelope.data.baseData);
-            });
-        });
-
-        let initResolved = false;
-
-        return new Promise<void>(resolve => {
-            AppInsights.queue.push(() => {
-                setTimeout(() => {
-                    if (!initResolved) {
-                        initResolved = true;
-                        resolve();
-                    }
-                }, 0);
-            });
-
-            setTimeout(() => {
-                if (!initResolved) {
-                    initResolved = true;
-                    resolve();
-                }
-            }, 3000);           // plan B: allow the dependent code flow even if AppInsihgts failed to load
-        });
-    }
-
-    export function trackPageView(pageName: string, values?: { [key: string]: unknown }) {
-        const { props, measures } = convertToPropsAndMeasurements(values);
-        AppInsights.trackPageView(pageName, undefined, props, measures);
-    }
-
-    export function trackTrace(message: string, severity: MetricSeverityLevel, values?: { [key: string]: unknown }) {
-        const props = convertToProps(values);
-        AppInsights.trackTrace(message, props, severity.valueOf());
-    }
-
-    export function trackEvent(name: string, values?: { [key: string]: unknown }) {
-        const { props, measures } = convertToPropsAndMeasurements(values);
-        AppInsights.trackEvent(name, props, measures);
-    }
-
-    export async function flush(): Promise<void> {
-        AppInsights.flush();
-
-        return new Promise<void>(resolve => {
-            setTimeout(() => { resolve(); }, 500);      // give some time for all network request to be sent and not cancelled by the browser
-        });
-    }
-
-    function convertToPropsAndMeasurements(values?: { [key: string]: unknown }) {
-        let props: { [key: string]: string } | undefined = {};
-        let measures: { [key: string]: number } | undefined = {};
-
-        if (values) {
-            // tslint:disable-next-line:no-for-in forin
-            for (const key in values) {
-                const value = values[key];
-                if (typeof value === "number") {
-                    measures[key] = value;
-                } else if (value) {
-                    addToProps(key, value, props);
-                }
-            }
+function loadAppInsights(ai: ApplicationInsights) {
+    ai.loadAppInsights();
+    let username = "unknown";
+    authContext.getUser((err, user) => {
+        if (err) {
+            console.log(chalk.yellow(err));
+        } else {
+            username = user ? user.userName : "unknown";
         }
+        ai.setAuthenticatedUserContext(
+            getHashString(username),
+            username,
+            true
+        );
+    });
 
-        if (Object.keys(props).length === 0) {
-            props = undefined;
+    ai.addTelemetryInitializer(envelope => {
+        if (envelope.tags) {
+            envelope.tags["ai.device.roleName"] = envelope.tags["ai.cloud.role"] = "dc-health";
         }
-        if (Object.keys(measures).length === 0) {
-            measures = undefined;
+        if (envelope.baseData) {
+            maskPersonalInfo(envelope.baseData);
         }
+    });
+}
 
-        return { props, measures };
-    }
+export function trackPageView(
+    pageName: string,
+    values?: { [key: string]: unknown }
+) {
+    const { props, measures } = convertToPropsAndMeasurements(values);
+    commonAppInsights.trackPageView({
+        name: pageName,
+        properties: props,
+        measurements: measures
+    });
+}
 
-    function convertToProps(values?: { [key: string]: unknown }) {
-        const props: { [key: string]: string } | undefined = {};
-        if (values) {
-            // tslint:disable-next-line:no-for-in forin
-            for (const key in values) {
-                const value = values[key];
-                if (value) {
-                    addToProps(key, value, props);
-                }
-            }
-        }
+export function trackTrace(
+    message: string,
+    severity: MetricSeverityLevel,
+    values?: { [key: string]: unknown }
+) {
+    const props = convertToProps(values);
+    commonAppInsights.trackTrace({
+        message,
+        properties: props,
+        severityLevel: severity.valueOf()
+    });
+}
 
-        return props;
-    }
+export function trackEvent(name: string, values?: { [key: string]: unknown }) {
+    const { props, measures } = convertToPropsAndMeasurements(values);
+    commonAppInsights.trackEvent({
+        name,
+        properties: props,
+        measurements: measures
+    });
+}
 
-    function addToProps(key: string, value: unknown, props: { [key: string]: string }) {
-        if (value) {
-            const strValue = `${value}`;
-            props[key] = ScrubTools.maskEmail(strValue);
-        }
-    }
+export async function flush(): Promise<void> {
+    commonAppInsights.flush();
 
-    type TelemetryBaseData = {
-        url: string;
-        properties: { [key: string]: string };
-    };
+    return new Promise<void>(resolve => {
+        setTimeout(() => {
+            resolve();
+        }, 500); // give some time for all network request to be sent and not cancelled by the browser
+    });
+}
 
-    function maskPersonalInfo(telemetry: TelemetryBaseData) {
-        if (telemetry.url) {
-            telemetry.url = ScrubTools.maskEmail(telemetry.url);
-        }
+function convertToPropsAndMeasurements(values?: { [key: string]: unknown }) {
+    let props: { [key: string]: string } | undefined = {};
+    let measures: { [key: string]: number } | undefined = {};
+
+    if (values) {
         // tslint:disable-next-line:no-for-in forin
-        for (const key in telemetry.properties) {
-            telemetry.properties[key] = ScrubTools.maskEmail(telemetry.properties[key]);
+        for (const key in values) {
+            const value = values[key];
+            if (typeof value === "number") {
+                measures[key] = value;
+            } else if (value) {
+                addToProps(key, value, props);
+            }
         }
+    }
+
+    if (Object.keys(props).length === 0) {
+        props = undefined;
+    }
+    if (Object.keys(measures).length === 0) {
+        measures = undefined;
+    }
+
+    return { props, measures };
+}
+
+function convertToProps(values?: { [key: string]: unknown }) {
+    const props: { [key: string]: string } | undefined = {};
+    if (values) {
+        // tslint:disable-next-line:no-for-in forin
+        for (const key in values) {
+            const value = values[key];
+            if (value) {
+                addToProps(key, value, props);
+            }
+        }
+    }
+
+    return props;
+}
+
+function addToProps(
+    key: string,
+    value: unknown,
+    props: { [key: string]: string }
+) {
+    if (value) {
+        const strValue = `${value}`;
+        props[key] = maskEmail(strValue);
+    }
+}
+
+// tslint:disable-next-line:no-any
+function maskPersonalInfo(telemetry: { [key: string]: any } | undefined) {
+    if (!telemetry) {
+        return;
+    }
+    if (telemetry.url) {
+        telemetry.url = maskEmail(telemetry.url);
+    }
+    // tslint:disable-next-line:no-for-in forin
+    for (const key in telemetry.properties) {
+        telemetry.properties[key] = maskEmail(
+            telemetry.properties[key]
+        );
     }
 }
