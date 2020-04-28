@@ -33,6 +33,8 @@ namespace Common.Auth
 
         public string Authority => $"{Instance}{TenantId}";
 
+        public string CallbackPath { get; set; }
+
         public static AadSettings ForMicrosoftTenant(string appId) => new AadSettings
         {
             Instance = MicrosoftAadLoginUrl,

@@ -6,86 +6,167 @@
 // </summary>
 // --------------------------------------------------------------------------------------------------------------------
 
-using System;
-using System.IO;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
-using Microsoft.IdentityModel.Clients.ActiveDirectory;
 
 namespace Common.Auth
 {
-    public class AadAuthBuilder
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using Microsoft.AspNetCore.Authentication;
+    using Microsoft.AspNetCore.Authentication.Cookies;
+    using Microsoft.AspNetCore.Authentication.JwtBearer;
+    using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+    using Microsoft.AspNetCore.Authorization;
+    using Microsoft.AspNetCore.Builder;
+    using Microsoft.AspNetCore.Http;
+    using Microsoft.Extensions.Configuration;
+    using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Options;
+
+    public static class AadAuthBuilder
     {
-        private readonly AadSettings _settings;
-
-        public AadAuthBuilder(AadSettings settings)
+        public static AuthenticationBuilder AddAadAuthentication(this IServiceCollection services,
+            IConfiguration configuration)
         {
-            _settings = settings;
-        }
-        //
-        // public TokenCredential GetTokenCredential()
-        // {
-        //     if (!string.IsNullOrEmpty(_settings.ClientSecretFile))
-        //     {
-        //         var clientSecretFile = GetSecretOrCertFile(_settings.ClientSecretFile);
-        //         var clientSecret = File.ReadAllText(clientSecretFile);
-        //
-        //         return new ClientSecretCredential(_settings.TenantId, _settings.ClientId, clientSecret);
-        //     }
-        //     else
-        //     {
-        //         var clientCertFile = GetSecretOrCertFile(_settings.ClientCertFile);
-        //         var certificate = new X509Certificate2(clientCertFile);
-        //
-        //         return new ClientCertificateCredential(_settings.TenantId, _settings.ClientId, certificate);
-        //     }
-        // }
-
-        public async Task<string> GetAccessTokenAsync(string resource)
-        {
-            var authContext = new AuthenticationContext(_settings.Authority);
-            if (!string.IsNullOrEmpty(_settings.ClientSecretFile))
-            {
-                var clientSecretFile = GetSecretOrCertFile(_settings.ClientSecretFile);
-                var clientSecret = File.ReadAllText(clientSecretFile);
-                var clientCredential = new ClientCredential(_settings.ClientId, clientSecret);
-                var result = await authContext.AcquireTokenAsync(resource, clientCredential);
-                return result?.AccessToken;
-            }
-            else
-            {
-                var clientCertFile = GetSecretOrCertFile(_settings.ClientCertFile);
-                var certificate = new X509Certificate2(clientCertFile);
-                var clientAssertion = new ClientAssertionCertificate(_settings.ClientId, certificate);
-                var result = await authContext.AcquireTokenAsync(resource, clientAssertion);
-                return result?.AccessToken;
-            }
-        }
-
-        /// <summary>
-        /// fallback: secretFile --> ~/.secrets/secretFile --> /tmp/.secrets/secretFile
-        /// </summary>
-        /// <param name="secretOrCertFile"></param>
-        /// <returns></returns>
-        /// <exception cref="Exception"></exception>
-        private static string GetSecretOrCertFile(string secretOrCertFile)
-        {
-            if (!File.Exists(secretOrCertFile))
-            {
-                var homeFolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                secretOrCertFile = Path.Combine(homeFolder, ".secrets", secretOrCertFile);
-
-                if (!File.Exists(secretOrCertFile))
+            return services
+                .AddAuthentication(opts =>
                 {
-                    secretOrCertFile = Path.Combine("/tmp/.secrets", secretOrCertFile);
-                }
-            }
-            if (!File.Exists(secretOrCertFile))
+                    opts.DefaultScheme = "smart";
+                    opts.DefaultChallengeScheme = "smart";
+                })
+                .AddPolicyScheme("smart", "Authorization Bearer or OIDC", opts =>
+                    {
+                        opts.ForwardDefaultSelector = AuthSelector(CookieAuthenticationDefaults.AuthenticationScheme);
+                    })
+                .AddAadBearer(opts => { configuration.Bind("AadSettings", opts);})
+                .AddAadOpenId(opts => {configuration.Bind("AadSettings", opts);})
+                .AddCookie(opts =>
+                {
+                    opts.ExpireTimeSpan = TimeSpan.FromHours(1);
+                    opts.SlidingExpiration = false;
+                });
+        }
+
+        public static void RequireAuthenticationOn(this IApplicationBuilder app, string pathPrefix)
+        {
+            app.Use((context, next) =>
             {
-                throw new System.Exception($"unable to find client secret/cert file: {secretOrCertFile}");
+                if (context.Request.Path.HasValue &&
+                    context.Request.Path.Value.StartsWith(pathPrefix, StringComparison.InvariantCultureIgnoreCase) &&
+                    !context.User.Identity.IsAuthenticated)
+                {
+                    return context.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme);
+                }
+
+                return next();
+            });
+        }
+
+        public static IServiceCollection AddAadAuthorization(this IServiceCollection services,
+            params string[] extraAuthSchemes)
+        {
+            var schemes = new List<string>(extraAuthSchemes)
+            {
+                JwtBearerDefaults.AuthenticationScheme,
+                OpenIdConnectDefaults.AuthenticationScheme
+            };
+            return services.AddAuthorization(options =>
+            {
+                options.DefaultPolicy = new AuthorizationPolicyBuilder()
+                    .RequireAuthenticatedUser()
+                    .AddAuthenticationSchemes(schemes.ToArray())
+                    .Build();
+            });
+        }
+
+        public static void UseHttpsForAadRedirect(this IApplicationBuilder app)
+        {
+            app.Use(async (context, next) =>
+            {
+                context.Request.Scheme = "https";
+                await next.Invoke();
+            });
+        }
+
+        #region auth
+        private static Func<HttpContext, string> AuthSelector(string fallbackScheme)
+        {
+            return context =>
+            {
+                var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+                return authHeader?.StartsWith("Bearer ") == true
+                    ? JwtBearerDefaults.AuthenticationScheme
+                    : fallbackScheme;
+            };
+        }
+
+        private static AuthenticationBuilder AddAadBearer(this AuthenticationBuilder builder,
+            Action<AadSettings> configureOptions)
+        {
+            builder.Services.Configure(configureOptions);
+            builder.Services.AddSingleton<IConfigureOptions<JwtBearerOptions>, ConfigureBearerOptions>();
+            builder.AddJwtBearer(opts => opts.SaveToken = true);
+
+            return builder;
+        }
+
+        private static AuthenticationBuilder AddAadOpenId(this AuthenticationBuilder builder,
+            Action<AadSettings> configureOptions)
+        {
+            builder.Services.Configure(configureOptions);
+            builder.Services.AddSingleton<IConfigureOptions<OpenIdConnectOptions>, ConfigureOpenIdOptions>();
+            builder.AddOpenIdConnect(opts =>
+            {
+                opts.SaveTokens = true;
+                opts.ForwardDefaultSelector = AuthSelector(OpenIdConnectDefaults.AuthenticationScheme);
+            });
+
+            return builder;
+        }
+
+        private class ConfigureBearerOptions : IConfigureNamedOptions<JwtBearerOptions>
+        {
+            private readonly AadSettings _aadSettings;
+
+            public ConfigureBearerOptions(IOptions<AadSettings> aadSettings)
+            {
+                _aadSettings = aadSettings.Value;
             }
 
-            return secretOrCertFile;
+            public void Configure(JwtBearerOptions options)
+            {
+                Configure(Options.DefaultName, options);
+            }
+
+            public void Configure(string name, JwtBearerOptions options)
+            {
+                options.Audience = _aadSettings.ClientId;
+                options.Authority = _aadSettings.Authority;
+            }
         }
+
+        private class ConfigureOpenIdOptions : IConfigureNamedOptions<OpenIdConnectOptions>
+        {
+            private readonly AadSettings _aadSettings;
+
+            public ConfigureOpenIdOptions(IOptions<AadSettings> aadSettings)
+            {
+                _aadSettings = aadSettings.Value;
+            }
+
+            public void Configure(OpenIdConnectOptions options)
+            {
+                Configure(Options.DefaultName, options);
+            }
+
+            public void Configure(string name, OpenIdConnectOptions options)
+            {
+                options.ClientId = _aadSettings.ClientId;
+                options.Authority = _aadSettings.Authority;
+                options.UseTokenLifetime = true;
+                options.CallbackPath = _aadSettings.CallbackPath;
+            }
+        }
+        #endregion
     }
 }

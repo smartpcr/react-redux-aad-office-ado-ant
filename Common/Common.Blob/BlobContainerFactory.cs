@@ -13,20 +13,22 @@ using Microsoft.Extensions.Logging;
 
 namespace Common.Blob
 {
+    using Microsoft.Azure.Services.AppAuthentication;
+
     internal class BlobContainerFactory
     {
-        private readonly BlobStorageSettings _blobSettings;
-        private readonly AadSettings _aadSettings;
-        private readonly VaultSettings _vaultSettings;
-        private readonly ILogger<BlobContainerFactory> _logger;
+        private readonly BlobStorageSettings blobSettings;
+        private readonly AadSettings aadSettings;
+        private readonly VaultSettings vaultSettings;
+        private readonly ILogger<BlobContainerFactory> logger;
         public BlobContainerClient Client { get; private set; }
 
         public BlobContainerFactory(IConfiguration configuration, ILoggerFactory loggerFactory)
         {
-            _blobSettings = configuration.GetConfiguredSettings<BlobStorageSettings>();
-            _aadSettings = configuration.GetConfiguredSettings<AadSettings>();
-            _vaultSettings = configuration.GetConfiguredSettings<VaultSettings>();
-            _logger = loggerFactory.CreateLogger<BlobContainerFactory>();
+            blobSettings = configuration.GetConfiguredSettings<BlobStorageSettings>();
+            aadSettings = configuration.GetConfiguredSettings<AadSettings>();
+            vaultSettings = configuration.GetConfiguredSettings<VaultSettings>();
+            logger = loggerFactory.CreateLogger<BlobContainerFactory>();
 
             if (!TryCreateUsingMsi())
             {
@@ -46,20 +48,20 @@ namespace Common.Blob
         /// <returns></returns>
         private bool TryCreateUsingMsi()
         {
-            _logger.LogInformation($"trying to access blob using msi...");
+            logger.LogInformation($"trying to access blob using msi...");
             try
             {
-                var containerClient = new BlobContainerClient(new Uri(_blobSettings.ContainerEndpoint), new DefaultAzureCredential());
+                var containerClient = new BlobContainerClient(new Uri(blobSettings.ContainerEndpoint), new DefaultAzureCredential());
                 containerClient.CreateIfNotExists();
 
                 TryRecreateTestBlob(containerClient);
-                _logger.LogInformation($"Succeed to access blob using msi");
+                logger.LogInformation($"Succeed to access blob using msi");
                 Client = containerClient;
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"failed to access blob {_blobSettings.Account}/{_blobSettings.Container} using msi");
+                logger.LogWarning($"failed to access blob {blobSettings.Account}/{blobSettings.Container} using msi\nerror: {ex.Message}");
                 return false;
             }
         }
@@ -70,23 +72,29 @@ namespace Common.Blob
         /// <returns></returns>
         private bool TryCreateUsingSpn()
         {
-            _logger.LogInformation($"trying to access blob using spn...");
+            logger.LogInformation($"trying to access blob using spn...");
             try
             {
-                var authBuilder = new AadAuthBuilder(_aadSettings);
-                var accessToken = authBuilder.GetAccessTokenAsync("https://storage.azure.com/").GetAwaiter().GetResult();
-                var tokenCredential = new ClientSecretCredential(_aadSettings.TenantId, _aadSettings.ClientId, accessToken);
-                var containerClient = new BlobContainerClient(new Uri(_blobSettings.ContainerEndpoint), tokenCredential);
-                containerClient.CreateIfNotExists();
+                var authBuilder = new AadTokenProvider(aadSettings);
+                var clientCredential = authBuilder.GetClientCredential();
+                BlobContainerClient containerClient;
+                if (clientCredential.secretCredential != null)
+                {
+                    containerClient = new BlobContainerClient(new Uri(blobSettings.ContainerEndpoint), clientCredential.secretCredential);
+                }
+                else
+                {
+                    containerClient = new BlobContainerClient(new Uri(blobSettings.ContainerEndpoint), clientCredential.certCredential);
+                }
 
                 TryRecreateTestBlob(containerClient);
-                _logger.LogInformation($"Succeed to access blob using msi");
+                logger.LogInformation($"Succeed to access blob using msi");
                 Client = containerClient;
                 return true;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"faield to access blob using spn...");
+                logger.LogWarning($"faield to access blob using spn.\nerror:{ex.Message}");
                 return false;
             }
         }
@@ -97,26 +105,44 @@ namespace Common.Blob
         /// <returns></returns>
         private bool TryCreateFromKeyVault()
         {
-            _logger.LogInformation($"trying to access blob from kv...");
-            try
+            if (!string.IsNullOrEmpty(blobSettings.ConnectionStringSecretName))
             {
-                var authBuilder = new AadAuthBuilder(_aadSettings);
-                Task<string> AuthCallback(string authority, string resource, string scope) => authBuilder.GetAccessTokenAsync(resource);
-                var kvClient = new KeyVaultClient(AuthCallback);
-                var connStrSecret = kvClient.GetSecretAsync(_vaultSettings.VaultUrl, _blobSettings.ConnectionStringSecretName).Result;
-                var containerClient = new BlobContainerClient(connStrSecret.Value, _blobSettings.Container);
-                containerClient.CreateIfNotExists();
+                logger.LogInformation($"trying to access blob from kv...");
+                try
+                {
+                    IKeyVaultClient kvClient;
+                    if (string.IsNullOrEmpty(aadSettings.ClientCertFile) && string.IsNullOrEmpty(aadSettings.ClientSecretFile))
+                    {
+                        var azureServiceTokenProvider = new AzureServiceTokenProvider();
+                        kvClient = new KeyVaultClient(
+                            new KeyVaultClient.AuthenticationCallback(
+                                azureServiceTokenProvider.KeyVaultTokenCallback));
+                    }
+                    else
+                    {
+                        var authBuilder = new AadTokenProvider(aadSettings);
+                        Task<string> AuthCallback(string authority, string resource, string scope) => authBuilder.GetAccessTokenAsync(resource);
+                        kvClient = new KeyVaultClient(AuthCallback);
+                    }
 
-                TryRecreateTestBlob(containerClient);
-                _logger.LogInformation($"Succeed to access blob using msi");
-                Client = containerClient;
-                return true;
+                    var connStrSecret = kvClient
+                        .GetSecretAsync(vaultSettings.VaultUrl, blobSettings.ConnectionStringSecretName).Result;
+                    var containerClient = new BlobContainerClient(connStrSecret.Value, blobSettings.Container);
+                    containerClient.CreateIfNotExists();
+
+                    TryRecreateTestBlob(containerClient);
+                    logger.LogInformation($"Succeed to access blob using msi");
+                    Client = containerClient;
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning($"faield to access blob from kv. \nerror:{ex.Message}");
+                    return false;
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"faield to access blob from kv...");
-                return false;
-            }
+
+            return false;
         }
 
         /// <summary>
@@ -125,37 +151,41 @@ namespace Common.Blob
         /// <returns></returns>
         private bool TryCreateUsingConnStr()
         {
-            _logger.LogInformation($"trying to access blob using connection string...");
-            try
+            if (!string.IsNullOrEmpty(blobSettings.ConnectionStringEnvName))
             {
-                var storageConnectionString = Environment.GetEnvironmentVariable(_blobSettings.ConnectionStringEnvName);
-                if (!string.IsNullOrEmpty(storageConnectionString))
+                logger.LogInformation($"trying to access blob using connection string...");
+                try
                 {
-                    var containerClient = new BlobContainerClient(storageConnectionString, _blobSettings.Container);
-                    containerClient.CreateIfNotExists();
-                    TryRecreateTestBlob(containerClient);
-                    Client = containerClient;
-                    return true;
+                    var storageConnectionString =
+                        Environment.GetEnvironmentVariable(blobSettings.ConnectionStringEnvName);
+                    if (!string.IsNullOrEmpty(storageConnectionString))
+                    {
+                        var containerClient = new BlobContainerClient(storageConnectionString, blobSettings.Container);
+                        containerClient.CreateIfNotExists();
+                        TryRecreateTestBlob(containerClient);
+                        Client = containerClient;
+                        return true;
+                    }
+
+                    return false;
                 }
-                return false;
+                catch (Exception ex)
+                {
+                    logger.LogWarning($"trying to access blob using connection string. \nerror{ex.Message}");
+                    return false;
+                }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, $"trying to access blob using connection string...");
-                return false;
-            }
+
+            return false;
         }
 
         private void TryRecreateTestBlob(BlobContainerClient containerClient)
         {
-            var blobClient = containerClient.GetBlobClient("__test");
-            if (blobClient.Exists())
+            var isContainerExists = containerClient.Exists();
+            if (!isContainerExists.Value)
             {
-                blobClient.Delete();
+                throw new Exception("Blob container is either not created or authn/authz failed");
             }
-
-            var blobContent = "test";
-            blobClient.Upload(new MemoryStream(Encoding.UTF8.GetBytes(blobContent)));
         }
     }
 }

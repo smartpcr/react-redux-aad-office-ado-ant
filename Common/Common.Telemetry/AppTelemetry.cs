@@ -15,48 +15,57 @@ using Microsoft.ApplicationInsights.Metrics;
 
 namespace Common.Telemetry
 {
+    using System.Diagnostics.CodeAnalysis;
+    using System.Runtime.CompilerServices;
+    using Config;
+    using Microsoft.Extensions.Configuration;
+    using Microsoft.Extensions.DependencyInjection;
+    using OpenTelemetry.Trace;
+
     public class AppTelemetry : IAppTelemetry, IDisposable
     {
-        private readonly TelemetryClient _appInsights;
-        private readonly string _ns;
+        private readonly TelemetryClient telemetryClient;
+        private readonly string ns;
 
         public string OperationId => Activity.Current.Id;
 
-        public AppTelemetry(string @namespace, TelemetryClient appInsights)
+        public AppTelemetry(IServiceProvider serviceProvider, IConfiguration configuration)
         {
-            _appInsights = appInsights;
-            _ns = @namespace;
+            telemetryClient = serviceProvider.GetRequiredService<TelemetryClient>();
+            var settings = configuration.GetConfiguredSettings<AppInsightsSettings>();
+            ns = settings.Namespace;
+            var tracerFactory = serviceProvider.GetService<TracerFactoryBase>();
         }
 
         public void RecordMetric(string name, long value, params (string key, string value)[] dimensions)
         {
             ValidateDimensions(dimensions);
 
-            var metricIdentifier = new MetricIdentifier(_ns, name, dimensions.Select(p => p.key).ToList());
-            var metric = _appInsights.GetMetric(metricIdentifier);
+            var metricIdentifier = new MetricIdentifier(ns, name, dimensions.Select(p => p.key).ToList());
+            var metric = telemetryClient.GetMetric(metricIdentifier);
             var tags = dimensions.Select(p => p.value).ToArray();
             if (tags.Length > 10)
             {
-                var m = _appInsights.GetMetric(new MetricIdentifier(_ns, "invalid-metric", "metric-name", "too many dimensions"));
-                m.TrackValue(1, _ns + "/" + name, dimensions.Length.ToString());
+                var m = telemetryClient.GetMetric(new MetricIdentifier(ns, "invalid-metric", "metric-name", "too many dimensions"));
+                m.TrackValue(1, ns + "/" + name, dimensions.Length.ToString());
             }
             metric?.Record(value, dimensions.Select(p => p.value).ToArray());
         }
 
-        public IDisposable StartOperation(object caller, string parentOperationId = null, string operationName = "")
+        public IDisposable StartOperation([NotNull]object caller, string parentOperationId = null, [CallerMemberName]string operationName = "")
         {
             operationName = (caller == null) ? operationName : caller.GetType().Name + "." + operationName;
-            return OperationScope.StartOperation(parentOperationId, operationName, _appInsights);
+            return OperationScope.StartOperation(parentOperationId, operationName, telemetryClient);
         }
 
         public void TrackEvent(string eventName, IDictionary<string, string> properties)
         {
-            _appInsights.TrackEvent(eventName, properties);
+            telemetryClient.TrackEvent(eventName, properties);
         }
 
         public void Dispose()
         {
-            _appInsights?.Flush();
+            telemetryClient?.Flush();
         }
 
         private static void ValidateDimensions((string key, string value)[] dimensions)

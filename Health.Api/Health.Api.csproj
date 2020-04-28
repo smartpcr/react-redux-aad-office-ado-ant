@@ -4,5 +4,12 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Common\Common.Auth\Common.Auth.csproj" />
+    <ProjectReference Include="..\Common\Common.Config\Common.Config.csproj" />
+    <ProjectReference Include="..\Common\Common.KeyVault\Common.KeyVault.csproj" />
+    <ProjectReference Include="..\Common\Common.Telemetry\Common.Telemetry.csproj" />
+  </ItemGroup>
+
 
 </Project>

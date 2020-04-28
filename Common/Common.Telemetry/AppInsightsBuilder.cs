@@ -17,79 +17,115 @@ using Microsoft.Extensions.Logging.ApplicationInsights;
 
 namespace Common.Telemetry
 {
+    using System.Collections.Generic;
+    using Microsoft.Extensions.Options;
+    using OpenTelemetry.Resources;
+    using OpenTelemetry.Trace.Configuration;
+    using OpenTelemetry.Trace.Samplers;
+
     public static class AppInsightsBuilder
     {
         public static IServiceCollection AddAppInsights(
             this IServiceCollection services,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILogger logger)
         {
-            var instrumentationKey = GetInstrumentationKey(configuration);
-
-            var serviceProvider = services.BuildServiceProvider();
-            if (serviceProvider.GetService<IHostingEnvironment>() == null)
-            {
-                // HACK: trick ApplicationInsights if not running under WebHost!
-                services.TryAddSingleton<IHostingEnvironment, SelfHostingEnvironment>();
-            }
-
             var settings = configuration.GetConfiguredSettings<AppInsightsSettings>();
-#pragma warning disable 618
-            var appInsightsConfig = TelemetryConfiguration.Active;
-#pragma warning restore 618
-            appInsightsConfig.InstrumentationKey = instrumentationKey;
-            appInsightsConfig.TelemetryInitializers.Add(new OperationCorrelationTelemetryInitializer());
-            appInsightsConfig.TelemetryInitializers.Add(new HttpDependenciesParsingTelemetryInitializer());
-            appInsightsConfig.TelemetryInitializers.Add(new ContextTelemetryInitializer(settings));
-            var module = new DependencyTrackingTelemetryModule();
-            module.IncludeDiagnosticSourceActivities.Add("Microsoft.Azure.ServiceBus");
-            module.IncludeDiagnosticSourceActivities.Add("Microsoft.Azure.EventHubs");
-            module.IncludeDiagnosticSourceActivities.Add("Microsoft.Azure.KeyVault");
-            module.IncludeDiagnosticSourceActivities.Add("Microsoft.Azure.DocumentDB");
-            module.Initialize(appInsightsConfig);
-
             var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
             var isProdEnv = string.IsNullOrEmpty(env) ||
                             env.Equals("prod", StringComparison.OrdinalIgnoreCase) ||
                             env.Equals("production", StringComparison.OrdinalIgnoreCase);
-            AddApplicationInsightsStorage(services, isProdEnv);
-            var options = new ApplicationInsightsServiceOptions
+            var instrumentationKey = GetInstrumentationKey(settings);
+            logger?.LogInformation($"instrumentation key: {instrumentationKey}, env: {env}");
+
+            var serviceProvider = services.BuildServiceProvider();
+            if (serviceProvider.GetService<IHostingEnvironment>() == null)
             {
-                InstrumentationKey = instrumentationKey,
-                DeveloperMode = !isProdEnv,
-                EnableDebugLogger = !isProdEnv,
-                AddAutoCollectedMetricExtractor = true,
-                EnableAdaptiveSampling = false,
-            };
-            options.DependencyCollectionOptions.EnableLegacyCorrelationHeadersInjection = true;
-            options.RequestCollectionOptions.InjectResponseHeaders = true;
-            options.RequestCollectionOptions.TrackExceptions = true;
-            services.AddApplicationInsightsTelemetry(options);
-            services.AddAppInsightsLogging(configuration);
-            services.TryAddSingleton<IAppTelemetry>(sp => new AppTelemetry(
-                settings.Role,
-                sp.GetRequiredService<TelemetryClient>()));
+                services.TryAddSingleton<IHostingEnvironment, SelfHostingEnvironment>();
+            }
+
+            AddApplicationInsightsStorage(services, isProdEnv);
+
+            if (settings.IsJob)
+            {
+                services.AddApplicationInsightsTelemetryWorkerService(o =>
+                    {
+                        o.InstrumentationKey = instrumentationKey;
+                        o.ApplicationVersion = settings.Version;
+                        o.DeveloperMode = !isProdEnv;
+                        o.EnableHeartbeat = true;
+                        o.EnableDebugLogger = !isProdEnv;
+                    });
+            }
+            else
+            {
+                var options = new ApplicationInsightsServiceOptions
+                {
+                    InstrumentationKey = instrumentationKey,
+                    DeveloperMode = !isProdEnv,
+                    EnableDebugLogger = !isProdEnv,
+                    AddAutoCollectedMetricExtractor = true,
+                    EnableAdaptiveSampling = false,
+                };
+                options.DependencyCollectionOptions.EnableLegacyCorrelationHeadersInjection = true;
+                options.RequestCollectionOptions.InjectResponseHeaders = true;
+                options.RequestCollectionOptions.TrackExceptions = true;
+                services.AddApplicationInsightsTelemetry(options);
+            }
+
+            services.AddSingleton<ITelemetryInitializer, ContextTelemetryInitializer>();
+            services.AddAppInsightsLogging(configuration, settings);
+            logger?.LogInformation($"Enabled app insights");
+
+            // open telemetry
+            if (settings.EnableTracing)
+            {
+                services.AddOpenTelemetry((sp, builder) =>
+                {
+                    builder.UseApplicationInsights(o =>
+                    {
+                        o.InstrumentationKey = instrumentationKey;
+                        o.TelemetryInitializers.Add(new ContextTelemetryInitializer(new OptionsWrapper<AppInsightsSettings>(settings)));
+                    });
+
+                    builder.SetSampler(new AlwaysSampleSampler())
+                        .AddDependencyCollector(config => { config.SetHttpFlavor = true; })
+                        .AddRequestCollector()
+                        .SetResource(new Resource(new Dictionary<string, object>
+                        {
+                            {"service.name", settings.Role}
+                        }));
+                });
+
+                logger?.LogInformation("export open telemetry to app insights");
+            }
+
+            serviceProvider = services.BuildServiceProvider();
+            services.TryAddSingleton<IAppTelemetry>(sp => new AppTelemetry(serviceProvider, configuration));
+            logger?.LogInformation($"enabled app telemetry");
 
             return services;
         }
 
         private static void AddAppInsightsLogging(
             this IServiceCollection services,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            AppInsightsSettings settings)
         {
             services.AddLogging(builder =>
             {
                 builder.AddConfiguration(configuration.GetSection("Logging"));
                 builder.AddConsole();
-                builder.AddApplicationInsights(GetInstrumentationKey(configuration));
+                builder.AddApplicationInsights(GetInstrumentationKey(settings));
                 builder.AddFilter<ApplicationInsightsLoggerProvider>("", LogLevel.Information);
             });
         }
 
-        private static string GetInstrumentationKey(IConfiguration configuration)
+        private static string GetInstrumentationKey(AppInsightsSettings settings)
         {
             var instrumentationKey =
                 Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY") ??
-                configuration.GetSection("AppInsightsSettings:InstrumentationKey").Value;
+                settings.InstrumentationKey;
 
             if (string.IsNullOrEmpty(instrumentationKey))
             {

@@ -10,6 +10,7 @@ namespace Common.KeyVault
 {
     public class HttpsSettings
     {
-        
+        public string SslCertSecretName { get; set; }
+        public int PortNumber { get; set; }
     }
 }
