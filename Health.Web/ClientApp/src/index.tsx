@@ -10,7 +10,7 @@ import configureStore from "./store/ConfigureStore";
 import { syncHistoryWithStore } from "react-router-redux";
 import { browserHistory, Route, Router } from "react-router";
 import { Provider } from "react-redux";
-import { Dashboard } from "./scenarios/ui/Dashboard";
+import { Dashboard } from "./scenarios/Dashboard/Dashboard";
 
 const store = configureStore();
 const history = syncHistoryWithStore(browserHistory, store);
