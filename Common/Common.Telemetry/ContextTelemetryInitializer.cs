@@ -12,22 +12,28 @@ using Microsoft.ApplicationInsights.Extensibility;
 
 namespace Common.Telemetry
 {
+    using System;
+    using Microsoft.Extensions.Options;
+
     internal class ContextTelemetryInitializer : ITelemetryInitializer
     {
-        private AppInsightsSettings _settings;
+        private readonly AppInsightsSettings settings;
 
-        public ContextTelemetryInitializer(AppInsightsSettings serviceContext)
+        public ContextTelemetryInitializer(IOptions<AppInsightsSettings> serviceContext)
         {
-            _settings = serviceContext;
+            settings = serviceContext.Value;
         }
 
         public void Initialize(ITelemetry telemetry)
         {
-            telemetry.Context.Cloud.RoleName = _settings.Role;
-            telemetry.Context.Component.Version = _settings.Version;
-            if (_settings.Tags?.Any() == true)
+            telemetry.Context.Cloud.RoleName = settings.Role;
+            telemetry.Context.Component.Version = settings.Version;
+            telemetry.Context.Cloud.RoleInstance = Environment.MachineName;
+            telemetry.Context.GlobalProperties["AppVersion"] = settings.Version;
+
+            if (settings.Tags?.Any() == true)
             {
-                telemetry.Context.GlobalProperties["tags"] = string.Join(",", _settings.Tags);
+                telemetry.Context.GlobalProperties["tags"] = string.Join(",", settings.Tags);
             }
         }
     }

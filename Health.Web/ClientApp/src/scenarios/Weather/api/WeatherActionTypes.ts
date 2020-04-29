@@ -1,0 +1,4 @@
+export enum WeatherActionTypes {
+    GET_WEATHER_SUCCESS = "GET_WEATHER_SUCCESS",
+    GET_WEATHER_ERROR = "GET_WEATHER_ERROR"
+}

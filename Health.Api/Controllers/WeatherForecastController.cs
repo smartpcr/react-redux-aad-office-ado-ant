@@ -7,6 +7,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Health.Api.Controllers
 {
+    using Microsoft.AspNetCore.Authorization;
+
+    [Authorize]
     [ApiController]
     [Route("[controller]")]
     public class WeatherForecastController : ControllerBase

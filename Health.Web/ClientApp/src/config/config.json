@@ -1,10 +1,10 @@
 {
-  "APPINSIGHTS_INSTRUMENTATION_KEY": "",
-  "API_URL": "",
+  "APPINSIGHTS_INSTRUMENTATION_KEY": "6e0abf0e-f451-43b6-8e57-e64025b73269",
+  "API_URL": "https://localhost.default.svc.cluster.local:5001",
   "AD_TENANT_ID": "72f988bf-86f1-41af-91ab-2d7cd011db47",
   "AD_CLIENT_ID": "87e94073-6809-4746-b283-4d266aea8510",
   "AD_RESOURCE_ID": "87e94073-6809-4746-b283-4d266aea8510",
   "GRAPH_RESOURCE_ID": "00000003-0000-0000-c000-000000000000",
   "CACHE_LOCATION": "localStorage",
-  "AD_REDIRECT_URI": ""
+  "AD_REDIRECT_URI": "https://localhost.default.svc.cluster.local:5002/redirect.html"
 }

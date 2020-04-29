@@ -1,10 +1,12 @@
 import { combineReducers } from "redux";
 import { StateType } from "typesafe-actions";
 import { routerReducer } from "react-router-redux";
+import { weatherReducer } from "~/scenarios/Weather/api/WeatherReducer";
 
 export const rootReducers = combineReducers(
     {
-        routing: routerReducer
+        routing: routerReducer,
+        weather: weatherReducer
     }
 );
 
