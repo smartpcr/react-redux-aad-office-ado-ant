@@ -10,6 +10,8 @@
     "jsx": "react",
     "moduleResolution": "node",
     "rootDir": "./",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
@@ -19,6 +21,9 @@
     "noUnusedLocals": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
     "paths": {
       "~/*": ["src/*"],
       "office-fabric/*": ["node_modules/office-ui-fabric-react/lib-commonjs/*"]

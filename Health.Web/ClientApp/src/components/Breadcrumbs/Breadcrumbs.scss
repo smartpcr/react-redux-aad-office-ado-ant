@@ -1,0 +1,43 @@
+@import '../../assets/sass/variables';
+
+.breadcrumbs {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  list-style-type: none;
+  margin: 0 0 $module-rem / 2;
+  padding: 0;
+
+  .item {
+    align-items: center;
+    display: flex;
+    cursor: pointer;
+    white-space: nowrap;
+
+    .breadcrumb-link {
+      color: main-palette(500);
+      font-weight: bold;
+      opacity: .6;
+      font-size: .72em;
+      font-weight: bold;
+      letter-spacing: .6px;
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: opacity .2s $animation;
+
+      &:hover {
+        opacity: 1;
+      }
+      &.last {
+        opacity: .4;
+        pointer-events: none;
+      }
+    }
+    .separator {
+      color: #b16f6f;
+      margin: 0 ($module-rem / 2);
+      opacity: .4;
+      font-size: 0.8em;
+    }
+  }
+}
