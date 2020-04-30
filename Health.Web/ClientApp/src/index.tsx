@@ -10,7 +10,7 @@ import configureStore from "./store/ConfigureStore";
 import { syncHistoryWithStore } from "react-router-redux";
 import { browserHistory, Route, Router } from "react-router";
 import { Provider } from "react-redux";
-import { Dashboard } from "./scenarios/Dashboard/Dashboard";
+import { Layout } from "./components/Layout/Layout";
 
 const store = configureStore();
 const history = syncHistoryWithStore(browserHistory, store);
@@ -27,7 +27,7 @@ runWithAdal(authContext, () => {
             <div>
                 <Provider store={store}>
                     <Router history={history}>
-                        <Route path="/" component={Dashboard} onEnter={() => trackPageView("Dashboard")} />
+                        <Route path="/" component={Layout} onEnter={() => trackPageView("Dashboard")} />
                     </Router>
                 </Provider>
             </div>

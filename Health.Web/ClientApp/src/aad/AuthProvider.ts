@@ -12,7 +12,8 @@ export const adalConfig: AdalConfig = {
     endpoints: {
         api: Config.getValue("AD_CLIENT_ID")
     },
-    cacheLocation: "localStorage"
+    cacheLocation: "localStorage",
+    redirectUri: window.location.origin
 };
 
 export const adResourceId = Config.getValue("AD_RESOURCE_ID");

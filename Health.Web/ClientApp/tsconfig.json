@@ -19,6 +19,7 @@
     "noUnusedLocals": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
     "paths": {
       "~/*": ["src/*"],
       "office-fabric/*": ["node_modules/office-ui-fabric-react/lib-commonjs/*"]
