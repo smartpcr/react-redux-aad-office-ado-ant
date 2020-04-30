@@ -3,9 +3,9 @@ import * as devConfig from "./config.Development.json";
 
 export module Config {
     const loadConfig = (): any => {
-        let settings = appConfig.default;
+        let settings = appConfig["default"];
         if (process.env.NODE_ENV === "development") {
-            settings = { ...settings, ...devConfig.default };
+            settings = { ...settings, ...devConfig };
         }
         return settings;
     };

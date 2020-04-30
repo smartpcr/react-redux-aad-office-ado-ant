@@ -1,12 +1,11 @@
 import { MetricSeverityLevel, trackTrace } from "./Metrics";
-import * as _ from "lodash";
 
 // follow-up: come fix this with proper typedefs once actions are typed
 // tslint:disable-next-line:no-any
 export const actionTracerMiddleware = (store: any) => (next: any) => (action: any) => {
     try {
         const actionType = <string>action.type;
-        if (!_(actionType).startsWith("@@")) { // exclude react actions
+        if (!(actionType).startsWith("@@")) { // exclude react actions
             let dimensions = {};
             const actionPayload = action.payload;
             if (actionPayload) {

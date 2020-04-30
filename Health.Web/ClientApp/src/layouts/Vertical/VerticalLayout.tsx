@@ -1,18 +1,17 @@
 import { IPageData } from "../BaseLayout/IPageData";
 import { IAppSettings } from "../BaseLayout/IAppSettings";
 import React, { useState, useEffect } from "react";
-import { defaultRoutes } from "~/layouts/routes";
 import Axios from "axios";
 import Navbar from "~/components/Navbar/NavBar";
 import Logo from "~/components/Logo/Logo";
 import Menu from "~/components/Menu/Menu";
 import NavbarSkeleton from "~/components/NavbarSkeleton/NavbarSkeleton";
 import { IMenuItem } from "~/components/Menu/IMenuItem";
-import Search from "~/components/Search/Search";
 import Actions from "~/components/Actions/Actions";
 import BaseLayout from "../BaseLayout/BaseLayout";
-import { Route } from "react-router";
-import BasePage from "~/components/BasePage/BasePage";
+import { RootState } from "~/store/RootReducer";
+import { Dispatch } from "redux";
+import { connect } from "react-redux";
 
 const getGradientString = (firstColor: string, secondColor: string): string =>
     `linear-gradient(188deg, ${firstColor}, ${secondColor} 65%)`;
@@ -20,16 +19,16 @@ const getGradientString = (firstColor: string, secondColor: string): string =>
 interface IVerticalLayoutProps {
     pageData: IPageData;
     settings: IAppSettings;
-    onSidebarToggle: () => void;
-    onSettingsReset: () => void;
-    onSettingsSet: (data: IAppSettings) => void;
-    onSettingsUpdate: (data: IAppSettings) => void;
-    onSetPage: (data: IPageData) => void;
-    onPageReset: () => void;
+    onSidebarToggle(): void;
+    onSettingsReset(): void;
+    onSettingsSet(data: IAppSettings): void;
+    onSettingsUpdate(data: IAppSettings): void;
+    onSetPage(data: IPageData): void;
+    onPageReset(): void;
 }
 
 const VerticalLayout: React.FunctionComponent<IVerticalLayoutProps> = props => {
-    const { pageData, settings, onSidebarToggle, onPageReset, onSetPage } = props;
+    const { pageData, settings, onSidebarToggle, onPageReset } = props;
     const {
         sidebarAccentColor,
         sidebarColor,
@@ -39,12 +38,12 @@ const VerticalLayout: React.FunctionComponent<IVerticalLayoutProps> = props => {
         sidebarBg,
         sidebarAccentContrastColor,
         sidebarOpened,
-        layout,
         boxed
     } = settings;
+    // tslint:disable-next-line: typedef
     const [menuData, setMenuData] = useState<IMenuItem[]>([]);
-    const [settingsVisibility, setSettingsVisibility] = useState(false);
-    const routes = defaultRoutes;
+    // tslint:disable-next-line: typedef
+    const [, setSettingsVisibility] = useState(false);
 
     useEffect(() => {
         async function fetchData() {
@@ -57,10 +56,6 @@ const VerticalLayout: React.FunctionComponent<IVerticalLayoutProps> = props => {
 
     const handleToggleSidebar = () => {
         onSidebarToggle();
-    };
-
-    const handleSettingsModalClose = () => {
-        setSettingsVisibility(false);
     };
 
     const handleSettingsClick = () => setSettingsVisibility(true);
@@ -104,13 +99,6 @@ const VerticalLayout: React.FunctionComponent<IVerticalLayoutProps> = props => {
                         <span />
                     </button>
 
-                    <Search
-                        style={{ color: topbarColor }}
-                        data={menuData}
-                        dataKey="title"
-                        className="d-none d-md-block"
-                    />
-
                     <Actions />
 
                     <NavbarSkeleton type="horizontal" loaded={props.pageData.fullFilled ?? false} />
@@ -120,20 +108,9 @@ const VerticalLayout: React.FunctionComponent<IVerticalLayoutProps> = props => {
                     pageData={pageData}
                     settings={settings}
                     onPageReset={onPageReset}
-                    onSidebarToggle={onSidebarToggle}>
-                    {routes.map((route, i) => {
-                        return (
-                            <Route
-                                key={i}
-                                path={`/vertical${route.path}`}
-                                render={() => (
-                                    <BasePage>
-                                        <route.component onSetPage={onSetPage} />
-                                    </BasePage>
-                                )}
-                            />
-                        );
-                    })}
+                    onSidebarToggle={onSidebarToggle}
+                >
+                    <span>hello</span>
                 </BaseLayout>
 
                 <button className="no-style settings-btn" onClick={handleSettingsClick}>
@@ -144,3 +121,17 @@ const VerticalLayout: React.FunctionComponent<IVerticalLayoutProps> = props => {
         </div>
     );
 };
+
+
+const mapStateToProps = (state: RootState) => ({
+
+});
+
+const mapDispatchToProps = (dispatch: Dispatch) => ({
+
+});
+
+export default connect(
+    mapStateToProps,
+    mapDispatchToProps
+)(VerticalLayout);

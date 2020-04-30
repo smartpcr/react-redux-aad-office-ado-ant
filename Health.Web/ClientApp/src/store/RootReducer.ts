@@ -1,12 +1,17 @@
 import { combineReducers } from "redux";
 import { StateType } from "typesafe-actions";
-import { routerReducer } from "react-router-redux";
 import { weatherReducer } from "~/scenarios/Weather/api/WeatherReducer";
+import { createHashHistory } from "history";
+import { connectRouter } from "connected-react-router";
+
+export const history = createHashHistory({
+    hashType: "slash"
+  });
 
 export const rootReducers = combineReducers(
     {
-        routing: routerReducer,
-        weather: weatherReducer
+        weather: weatherReducer,
+        router: connectRouter(history)
     }
 );
 

@@ -1,6 +1,6 @@
 import React from "react";
 
-import "../BaseError/BaseErrorPage.scss";
+import "./BaseErrorPage.scss";
 import BaseError from "./BaseError";
 
 const errorData = {
